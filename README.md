@@ -1,5 +1,5 @@
 # QuantSC-Capstone
-Leveraged ETF Stat Arb Project by Sid and Kian. QuantSC Project Spring '25.
+Leveraged ETF Stat Arb Project by Sid Goyal and Kian Jagtiani. QuantSC Project Spring '25.
 
 
 Current files:
