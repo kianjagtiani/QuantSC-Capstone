@@ -4,8 +4,8 @@ Leveraged ETF Statistical Arbitrage Project by Sid Goyal and Kian Jagtiani. Quan
 
 Current files:
 - OLS Regression Implementation
-- ETF web scraper (connect to OLS Regression later to identify portfolio ETFs)
-- LETF ranker
+- ETF web scraper
+- LETF ranker by leverage deviation using OLS
 - Papers
 - All base code
 - RL analysis
