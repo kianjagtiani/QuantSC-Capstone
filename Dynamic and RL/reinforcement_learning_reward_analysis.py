@@ -8,22 +8,14 @@ Original file is located at
 """
 
 !pip install stable-baselines3[extra] gymnasium
-
-# if you want the classic OpenAI Gym:
 !pip install gym
-
-# or, if you prefer Gymnasium (and you haven’t yet):
 !pip install gymnasium
-
-# plus Stable-Baselines3 extras:
 !pip install stable-baselines3[extra]
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
 import matplotlib.pyplot as plt
-
-# ─── Dynamic import of Gymnasium vs classic Gym ───────────────────────────────
 try:
     import gymnasium as gym
     from gymnasium import spaces
@@ -33,7 +25,7 @@ except ImportError:
     from gym import spaces
     USE_GYMNASIUM = False
 
-# ─── I) Single‐step ETF pair strategy ──────────────────────────────────────────
+# Regular Strategy
 class ETFPairTradingStrategy:
     def __init__(self, bull_weight, bear_weight, rebalance_threshold, inout_threshold):
         total = bull_weight + bear_weight
@@ -51,7 +43,6 @@ class ETFPairTradingStrategy:
 
     def step(self, ret_bull, ret_bear, ret_tbill):
         prev = self.current_value
-        # mark‐to‐market each leg
         self.sh_bull *= (1 - ret_bull)
         self.sh_bear *= (1 - ret_bear)
         self.long_t   *= (1 + ret_tbill)
@@ -59,7 +50,7 @@ class ETFPairTradingStrategy:
         cost = 0.0
         ts = self.sh_bull + self.sh_bear
 
-        # rebalance if bull‐ratio ∉ [bw−δ, bw+δ]
+        # rebalance
         curr_bw = (self.sh_bull / ts) if ts > 0 else self.bull_weight
         low, high = self.bull_weight - self.rebalance_thresh, self.bull_weight + self.rebalance_thresh
         if curr_bw < low or curr_bw > high:
@@ -68,7 +59,7 @@ class ETFPairTradingStrategy:
             self.sh_bear = self.bear_weight * ts
             cost += traded
 
-        # inflow/outflow on margin breaches
+        # inflow/outflow
         ts = self.sh_bull + self.sh_bear
         ratio = (self.long_t / ts) if ts > 0 else 1.0
         if ratio < (1 - self.inout_thresh):
@@ -84,12 +75,14 @@ class ETFPairTradingStrategy:
             self.sh_bear *= factor
             cost += traded
 
-        # new portfolio value & reward
+        # updated portfolio value & reward
         self.current_value = self.long_t + self.sh_bull + self.sh_bear
         reward = (self.current_value - prev) - 0.001 * cost
         return self.current_value, reward
 
-# ─── II) Gym Env wrapper ───────────────────────────────────────────────────────
+
+# Section 2
+# Gym Env wrapper 
 class PairEnv(gym.Env):
     metadata = {"render.modes": ["human"]}
 
@@ -104,7 +97,6 @@ class PairEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(4,), dtype=np.float32
         )
-        # Act: [rebalance_thresh ∈ [0,0.2], bull_weight ∈ [0,1]]
         self.action_space      = spaces.Box(
             low=np.array([0.0,0.0]), high=np.array([0.2,1.0]), dtype=np.float32
         )
@@ -142,11 +134,10 @@ class PairEnv(gym.Env):
         mr    = self.strategy.long_t   / (self.strategy.sh_bull + self.strategy.sh_bear)
         return np.array([vol, mom, bw, mr], dtype=np.float32)
 
-# ─── III) Data prep & train PPO ────────────────────────────────────────────────
+# Training PPO
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback
 
-# 1) Download auto‐adjusted "Close"
 tickers = ["^GSPC","UPRO","SPXU"]
 df = yf.download(
     tickers,
@@ -178,7 +169,7 @@ model = PPO("MlpPolicy", train_env, learning_rate=3e-4, batch_size=64, verbose=1
 model.learn(total_timesteps=50_000, callback=eval_callback)
 model.save("ppo-pair-agent")
 
-# ─── IV) Backtest & plot ───────────────────────────────────────────────────────
+# Backtest
 model = PPO.load("./logs/best_model.zip")
 
 if USE_GYMNASIUM:
@@ -196,10 +187,10 @@ while not done:
         obs, _, done, _    = eval_env.step(action)
     port_vals.append(eval_env.strategy.current_value)
 
-# align lengths by dropping initial seed and slicing the index to match
 pv = pd.Series(port_vals[1:], index=eval_df.index[20:])
 bh = 10_000 * (1 + eval_df["^GSPC"].iloc[20:]).cumprod()
 
+# Plot
 plt.figure(figsize=(12,6))
 plt.plot(pv, label="RL-Pair Strategy")
 plt.plot(bh, label="S&P 500 B&H")
@@ -212,8 +203,6 @@ plt.show()
 
 import subprocess
 import sys
-
-# ─── Ensure stable-baselines3 is installed ────────────────────────────────────
 subprocess.check_call([sys.executable, "-m", "pip", "install", "stable-baselines3[extra]"])
 
 import numpy as np
@@ -222,7 +211,6 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
 
-# ─── 1) Utility functions ─────────────────────────────────────────────────────
 def get_market_data(ticker, start_date, end_date):
     data = yf.download(ticker, start=start_date, end=end_date, progress=False)
     if data.empty:
@@ -245,7 +233,7 @@ def estimate_leverage_parameters(etf_ret, mkt_ret):
     print(f"alpha={alpha:.6f}, beta={beta:.6f}, R²={model.rsquared:.4f}")
     return alpha, beta
 
-# ─── 2) Pair-Trading Strategy ───────────────────────────────────────────────────
+# Strategy
 class ETFPairTradingStrategy:
     def __init__(self, bull_weight, bear_weight, rebalance_threshold, inout_threshold):
         total = bull_weight + bear_weight
@@ -297,7 +285,7 @@ class ETFPairTradingStrategy:
         reward = (self.current_value - prev) - 0.001*cost
         return self.current_value, reward
 
-# ─── 3) RL environment wrapper ─────────────────────────────────────────────────
+# RL environment wrapper
 try:
     import gymnasium as gym
     from gymnasium import spaces
@@ -345,7 +333,7 @@ class PairEnv(gym.Env):
         mr  = self.strategy.long_t  /(self.strategy.sh_bull+self.strategy.sh_bear)
         return np.array([vol, vix, mom, bw, mr], dtype=np.float32)
 
-# ─── 4) Main: data, train, backtest, plot ──────────────────────────────────────
+# Main
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback
 
